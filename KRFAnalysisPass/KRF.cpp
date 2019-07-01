@@ -16,6 +16,10 @@ using namespace llvm;
 
 namespace {
 
+using JObject = json::Object;
+using JArray = json::Array;
+using JValue = json::Value;
+
 cl::opt<bool> Json("krf-json", cl::desc("Print output in json format"));
 cl::opt<std::string> Filename("krf-output", cl::desc("Output file"), cl::init("krfpass.out"));
 
@@ -203,12 +207,8 @@ struct KRF : public ModulePass {
     if (FD_EC) {
       return false;
     }
-    json::OStream *J = (Json) ? new json::OStream(output) : NULL;
-    if (Json) {
-      J->objectBegin();
-      J->attributeBegin(M.getName());
-      J->objectBegin();
-    } else {
+    JArray JRoot{};
+    if (!Json) {
       output << "KRF: entered module ";
       output.write_escaped(M.getName()) << '\n';
     }
@@ -216,10 +216,7 @@ struct KRF : public ModulePass {
       if (F.isIntrinsic()) {
         continue;
       }
-      if (Json) {
-        J->attributeBegin((F.hasName()) ? F.getName() : "unname_function");
-        J->arrayBegin();
-      } else {
+      if (!Json) {
         output << "  entered function ";
         output.write_escaped((F.hasName()) ? F.getName() : "unname_function") << '\n';
       }
@@ -237,8 +234,7 @@ struct KRF : public ModulePass {
                        load_inst->users()) {     // Then for every inst that uses *that* result
                     if (dyn_cast<ICmpInst>(V)) { // Check if its a comparison
                       if (Json) {
-                        J->attribute("errno_checked", true);
-                        J->objectEnd();
+                        (*JRoot.back().getAsObject()->get("errno_checked")) = true;
                       } else {
                         output << "      errno checked: yes\n";
                       }
@@ -251,10 +247,6 @@ struct KRF : public ModulePass {
               continue;
             }
             if (lookingForErrno) {
-              if (Json) {
-                J->attribute("errno_checked", false);
-                J->objectEnd();
-              }
               lookingForErrno = 0;
             }
             if (!callee || !callee->hasName() ||
@@ -264,12 +256,19 @@ struct KRF : public ModulePass {
             if (callee->getReturnType()->isVoidTy()) {
               continue;
             }
-            if (call_inst->hasNUses(0)) { // If function's result is never used
+            int isChecked = 0;
+            if (!call_inst->hasNUses(0)) {
+              for (const auto U : call_inst->users()) {
+                if (dyn_cast<ICmpInst>(U)) {
+                  isChecked = 1; // Could add check on operands to see if its < 0 or == -1
+                  break;
+                }
+              }
+            }
+
+            if (!isChecked) { // If function's result is never used
               lookingForErrno = 1;
-              if (Json) {
-                J->objectBegin();
-                J->attribute("call", callee->getName());
-              } else {
+              if (!Json) {
                 output << "    warning: return value of " << callee->getName() << " is unused\n";
               }
               if (DILocation *Loc = I.getDebugLoc()) { // Gets source info if exists
@@ -278,37 +277,42 @@ struct KRF : public ModulePass {
                   StringRef File = Loc->getFilename();
                   StringRef Dir = Loc->getDirectory();
                   if (Json) {
-                    J->attribute("line", Line);
-                    J->attribute("file", File);
-                    J->attribute("dir", Dir);
+                    JRoot.push_back(JObject{
+                        {"function", (F.hasName() ? F.getName() : "unname_function")},
+                        {"module", M.getName()},
+                        {"errno_checked", false},
+                        {"call", callee->getName()},
+                        {"line", Line},
+                        {"file", File},
+                        {"dir", Dir},
+                    });
                   } else {
                     output << "      at " << Dir << '/' << File << ':' << Line << '\n';
                   }
                 }
+              } else {
+                if (Json) {
+                  JRoot.push_back(JObject{
+                      {"function", F.getName()},
+                      {"module", M.getName()},
+                      {"call", callee->getName()},
+                      {"errno_checked", false},
+
+                  });
+                }
               }
             }
           }
-        }
-        if (Json && lookingForErrno) {
-          J->attribute("errno_checked", false);
-          J->objectEnd();
-        }
-      }
-      if (Json) {
-        J->arrayEnd();
-        J->attributeEnd();
-      }
-    }
+        } // Inst iterator
+      }   // BB iterator
+    }     // Function iterator
     if (Json) {
-      J->objectEnd();
-      J->attributeEnd();
-      J->objectEnd();
-      J->flush();
-      output << '\n';
+      JValue Jout(std::move(JRoot));
+      output << Jout << '\n';
     }
     return false;
-  }
-}; // end of struct KRF
+  } // End of runOnModule()
+};  // end of struct KRF
 } // end of anonymous namespace
 
 char KRF::ID = 0;
