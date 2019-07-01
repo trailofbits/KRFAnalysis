@@ -1,0 +1,12 @@
+dist: xenial
+language: c++
+compiler: clang
+before_install:
+  - sudo apt-get install cmake zlib1g0dev ninja-build python3.7 python3.7-dev python3-pip wget software-properties-common clang-format
+  - wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key| sudo apt-key add -
+  - sudo add-apt-repository 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-8 main'
+  - sudo apt-get update && sudo apt-get -y install llvm-8 llvm-8-dev
+  - pip install black
+script:
+  - clang-format -i -style=file KRFAnalysis/*.cpp && black triage/triage.py && git-diff --exit-code
+  - mkdir build && cd build && cmake ../KRFAnalysis && cmake --build .
