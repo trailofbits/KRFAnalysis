@@ -9,4 +9,4 @@ before_install:
   - pip install black
 script:
   - clang-format -i -style=file KRFAnalysis/*.cpp && black triage/triage.py && git-diff --exit-code
-  - mkdir build && cd build && cmake ../KRFAnalysis && cmake --build
+  - mkdir build && cd build && cmake ../KRFAnalysis && cmake --build .
