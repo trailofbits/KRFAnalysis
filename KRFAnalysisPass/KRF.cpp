@@ -203,6 +203,108 @@ struct KRF : public ModulePass {
                                                                  "write",
                                                                  "syscall"};
 
+  std::unordered_set<std::string> walked;
+  std::unordered_set<User *> walkedU;
+  bool errCheck(User * I /*, JArray * tainted*/) { // TODO: add special behavior for loads and stores to track stored tained values
+    if (walkedU.count(I)) {
+      return false;
+    } else {
+      walkedU.insert(I);
+    }
+    
+    //    if (I->hasNUses(0)) {
+    //return false;
+    //    }
+    /*    if (I->hasName()) {
+      if (walked.count(I->getName())) {
+	return false;
+      } else {
+	walked.insert(I->getName().str());
+      }
+    } else {
+      I->setName(std::to_string(rand()));
+      walked.insert(I->getName().str());
+    }*/
+    if (StoreInst *str_inst = dyn_cast<StoreInst>(I)) {
+      for (auto U : str_inst->getPointerOperand()->users()) {
+	errCheck(U);
+      }
+    }
+    if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
+      Function *callee = call_inst->getCalledFunction();
+      if (callee && callee->hasName()) { // if not in the blacklist iterate over uses of the arg
+	if (blacklisted_functions.count(callee->getName().str())) {
+	  if (Json) {
+	    // TODO
+	  } else {
+	    errs() << "[X]   tainted function call to " << callee->getName() << '\n';
+	  }
+	} else {
+	  errs() << "      tainted function call to " << callee->getName() << '\n';
+	}
+      }
+    } else if (ICmpInst *cmp_inst = dyn_cast<ICmpInst>(I)) {
+      return true; // Assumes any cmp is checking for error
+    }
+    for (auto U : I->users()) {
+      if (errCheck(U))
+	return true;
+    }
+    return false;
+  }
+  /*
+  bool errCheck(Use* use) {
+    User * I = use->getUser();
+    if (walkedU.count(I)) {
+      return false;
+    } else {
+      walkedU.insert(I);
+    }
+    
+    //    if (I->hasNUses(0)) {
+    //return false;
+    //    }
+    /*    if (I->hasName()) {
+      if (walked.count(I->getName())) {
+	return false;
+      } else {
+	walked.insert(I->getName().str());
+      }
+    } else {
+      I->setName(std::to_string(rand()));
+      walked.insert(I->getName().str());
+      }*//*
+    if (StoreInst *str_inst = dyn_cast<StoreInst>(I)) {
+      for (auto U : str_inst->getPointerOperand()->uses()) {
+	errCheck(&U);
+      }
+    }
+    if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
+      Function *callee = call_inst->getCalledFunction();
+      if (callee && callee->hasName()) { // if not in the blacklist iterate over uses of the arg
+	if (blacklisted_functions.count(callee->getName().str())) {
+	  if (Json) {
+	    // TODO
+	  } else {
+	    errs() << "      tainted function call to " << callee->getName() << '\n';
+	  }
+	} else {
+	  for (auto& U : callee->getOperand(use->getOperandNo())->uses()) {
+	    errCheck(U);
+	  }
+	}
+      }
+    } else if (ICmpInst *cmp_inst = dyn_cast<ICmpInst>(I)) {
+      return true; // Assumes any cmp is checking for error
+    }
+    for (auto& U : I->uses()) {
+      if (errCheck(U))
+	return true;
+    }
+    return false;
+  }
+
+	       */
   bool runOnModule(Module &M) override {
     if (FD_EC) {
       return false;
@@ -212,7 +314,7 @@ struct KRF : public ModulePass {
       output << "KRF: entered module ";
       output.write_escaped(M.getName()) << '\n';
     }
-    for (const auto &F : M) {
+    for (auto &F : M) {
       if (F.isIntrinsic()) {
         continue;
       }
@@ -220,17 +322,17 @@ struct KRF : public ModulePass {
         output << "  entered function ";
         output.write_escaped((F.hasName()) ? F.getName() : "unname_function") << '\n';
       }
-      for (const auto &B : F) {
+      for (auto &B : F) {
         int lookingForErrno = 0;
-        for (const auto &I : B) {
-          if (const CallInst *call_inst = dyn_cast<CallInst>(&I)) {
-            const Function *callee = call_inst->getCalledFunction();
+        for (auto &I : B) {
+          if (CallInst *call_inst = dyn_cast<CallInst>(&I)) {
+            Function *callee = call_inst->getCalledFunction();
             if (lookingForErrno && callee && callee->hasName() &&
                 callee->getName().equals("__errno_location")) { // If call to errno
-              for (const auto U :
+              for (auto U :
                    call_inst->users()) { // For every instruction that uses that result
-                if (const LoadInst *load_inst = dyn_cast<LoadInst>(U)) { // Check if its a load
-                  for (const auto V :
+                if (LoadInst *load_inst = dyn_cast<LoadInst>(U)) { // Check if its a load
+                  for (auto V :
                        load_inst->users()) {     // Then for every inst that uses *that* result
                     if (dyn_cast<ICmpInst>(V)) { // Check if its a comparison
                       if (Json) {
@@ -258,7 +360,8 @@ struct KRF : public ModulePass {
             }
             int isChecked = 0;
             if (!call_inst->hasNUses(0)) {
-              for (const auto U : call_inst->users()) {
+              for (auto U : call_inst->users()) {
+		isChecked = errCheck(U);
                 if (dyn_cast<ICmpInst>(U)) {
                   isChecked = 1; // Could add check on operands to see if its < 0 or == -1
                   break;
