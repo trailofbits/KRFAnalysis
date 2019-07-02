@@ -8,7 +8,7 @@ before_install:
   - wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key| sudo apt-key add -
   - sudo add-apt-repository 'deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-8 main'
   - sudo apt-get update && sudo apt-get -y install llvm-8 llvm-8-dev
-  - pip install black
+  - pip3 install black
 script:
   - clang-format -i -style=file KRFAnalysis/*.cpp && black triage/triage.py && git-diff --exit-code
   - mkdir build && cd build && cmake ../KRFAnalysis && cmake --build .
