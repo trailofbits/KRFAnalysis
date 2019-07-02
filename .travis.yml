@@ -1,6 +1,7 @@
 dist: xenial
 language: c++
 compiler: clang
+python: "3.7"
 before_install:
   - sudo apt-get update
   - sudo apt-get install cmake zlib1g-dev ninja-build python3-pip wget software-properties-common clang-format
