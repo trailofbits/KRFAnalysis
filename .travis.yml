@@ -11,7 +11,7 @@ jobs:
         - sudo apt-get install clang-format
         - pip install black
       script:
-        - clang-format -i -style=file KRFAnalysis/*.cpp && git diff --exit-code
+        - clang-format -i -style=file KRFAnalysisPass/*.cpp && git diff --exit-code
         - black --check triage/triage.py
     - stage: build
       language: c++
@@ -24,5 +24,5 @@ jobs:
       script:
         - mkdir build
         - cd build
-        - cmake ../KRFAnalysis
+        - cmake ../KRFAnalysisPass
         - cmake --build .
