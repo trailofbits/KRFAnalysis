@@ -203,108 +203,59 @@ struct KRF : public ModulePass {
                                                                  "write",
                                                                  "syscall"};
 
-  std::unordered_set<std::string> walked;
   std::unordered_set<User *> walkedU;
-  bool errCheck(User * I /*, JArray * tainted*/) { // TODO: add special behavior for loads and stores to track stored tained values
-    if (walkedU.count(I)) {
+  bool errCheck(Use& use) { // TODO: add JArray* arg and add tainted files to JSON
+    User * I = use.getUser();
+    if (walkedU.count(I)) { // use or user? could cause skipping if two arguments are tainted
       return false;
     } else {
       walkedU.insert(I);
     }
-    
-    //    if (I->hasNUses(0)) {
-    //return false;
-    //    }
-    /*    if (I->hasName()) {
-      if (walked.count(I->getName())) {
-	return false;
-      } else {
-	walked.insert(I->getName().str());
-      }
-    } else {
-      I->setName(std::to_string(rand()));
-      walked.insert(I->getName().str());
-    }*/
     if (StoreInst *str_inst = dyn_cast<StoreInst>(I)) {
-      for (auto U : str_inst->getPointerOperand()->users()) {
-	errCheck(U);
+      for (Use& U: str_inst->getPointerOperand()->uses()) {
+	if (errCheck(U)) {
+	  return true;
+	}
       }
     }
-    if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
+    if (CallInst *call_inst = dyn_cast<CallInst>(I)) { // TODO: Add 'invoke' support as well
       Function *callee = call_inst->getCalledFunction();
-      if (callee && callee->hasName()) { // if not in the blacklist iterate over uses of the arg
+      if (callee && callee->hasName() && !callee->isIntrinsic()) {
 	if (blacklisted_functions.count(callee->getName().str())) {
 	  if (Json) {
 	    // TODO
 	  } else {
-	    errs() << "[X]   tainted function call to " << callee->getName() << '\n';
+	    errs() << "      tainted syscall " << callee->getName() << " with argument #" << use.getOperandNo() << '\n';
 	  }
 	} else {
-	  errs() << "      tainted function call to " << callee->getName() << '\n';
-	}
-      }
-    } else if (ICmpInst *cmp_inst = dyn_cast<ICmpInst>(I)) {
-      return true; // Assumes any cmp is checking for error
-    }
-    for (auto U : I->users()) {
-      if (errCheck(U))
-	return true;
-    }
-    return false;
-  }
-  /*
-  bool errCheck(Use* use) {
-    User * I = use->getUser();
-    if (walkedU.count(I)) {
-      return false;
-    } else {
-      walkedU.insert(I);
-    }
-    
-    //    if (I->hasNUses(0)) {
-    //return false;
-    //    }
-    /*    if (I->hasName()) {
-      if (walked.count(I->getName())) {
-	return false;
-      } else {
-	walked.insert(I->getName().str());
-      }
-    } else {
-      I->setName(std::to_string(rand()));
-      walked.insert(I->getName().str());
-      }*//*
-    if (StoreInst *str_inst = dyn_cast<StoreInst>(I)) {
-      for (auto U : str_inst->getPointerOperand()->uses()) {
-	errCheck(&U);
-      }
-    }
-    if (CallInst *call_inst = dyn_cast<CallInst>(I)) {
-      Function *callee = call_inst->getCalledFunction();
-      if (callee && callee->hasName()) { // if not in the blacklist iterate over uses of the arg
-	if (blacklisted_functions.count(callee->getName().str())) {
-	  if (Json) {
-	    // TODO
+	  if (!callee->isStrongDefinitionForLinker()) { // An external function
+	    errs() << "      tainted external function call to " << callee->getName() << "() with argument #" << use.getOperandNo() << '\n';
+	  } else if (callee->isVarArg()) { // Can't trace operand #
+	    errs() << "      tainted variadic function to " << callee->getName() << "() with argument #" << use.getOperandNo() << '\n';
 	  } else {
-	    errs() << "      tainted function call to " << callee->getName() << '\n';
-	  }
-	} else {
-	  for (auto& U : callee->getOperand(use->getOperandNo())->uses()) {
-	    errCheck(U);
+	    for (auto& arg: callee->args()) {
+	      if (arg.getArgNo() == use.getOperandNo()) {
+		for (Use& U : arg.uses()) {
+		  errCheck(U);
+		}
+		break;
+	      }
+	    }
 	  }
 	}
+	// Insert line, file, and dir information if it exists (can do here because all three cases can have such info)
       }
-    } else if (ICmpInst *cmp_inst = dyn_cast<ICmpInst>(I)) {
-      return true; // Assumes any cmp is checking for error
+    }
+    if (ICmpInst *cmp_inst = dyn_cast<ICmpInst>(I)) {
+      return true;
     }
     for (auto& U : I->uses()) {
       if (errCheck(U))
 	return true;
     }
     return false;
-  }
+  }    
 
-	       */
   bool runOnModule(Module &M) override {
     if (FD_EC) {
       return false;
@@ -315,7 +266,7 @@ struct KRF : public ModulePass {
       output.write_escaped(M.getName()) << '\n';
     }
     for (auto &F : M) {
-      if (F.isIntrinsic()) {
+      if (F.isIntrinsic() || !F.isStrongDefinitionForLinker()) {
         continue;
       }
       if (!Json) {
@@ -360,9 +311,9 @@ struct KRF : public ModulePass {
             }
             int isChecked = 0;
             if (!call_inst->hasNUses(0)) {
-              for (auto U : call_inst->users()) {
+              for (auto& U : call_inst->uses()) {
 		isChecked = errCheck(U);
-                if (dyn_cast<ICmpInst>(U)) {
+                if (dyn_cast<ICmpInst>(U.getUser())) {
                   isChecked = 1; // Could add check on operands to see if its < 0 or == -1
                   break;
                 }
