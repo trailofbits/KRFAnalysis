@@ -204,23 +204,23 @@ struct KRF : public ModulePass {
                                                                  "write",
                                                                  "syscall"};
 
-  std::unordered_set<User *> walkedU;
-  bool errCheck(Use &use) {
-    User *I = use.getUser();
+  std::unordered_set<const User *> walkedU;
+  bool errCheck(const Use &use) {
+    const User *I = use.getUser();
     if (walkedU.count(I)) { // use or user? could cause skipping if two arguments are tainted
       return false;
     } else {
       walkedU.insert(I);
     }
-    if (StoreInst *str_inst = dyn_cast<StoreInst>(I)) {
-      for (Use &U : str_inst->getPointerOperand()->uses()) {
+    if (const StoreInst *str_inst = dyn_cast<StoreInst>(I)) {
+      for (const Use &U : str_inst->getPointerOperand()->uses()) {
         if (errCheck(U)) {
           return true;
         }
       }
     }
-    if (CallInst *call_inst = dyn_cast<CallInst>(I)) { // TODO: Add 'invoke' support as well
-      Function *callee = call_inst->getCalledFunction();
+    if (const CallInst *call_inst = dyn_cast<CallInst>(I)) { // TODO: Add 'invoke' support as well
+      const Function *callee = call_inst->getCalledFunction();
       if (callee && callee->hasName() && !callee->isIntrinsic()) {
         JObject jresp;
         if (blacklisted_functions.count(callee->getName().str())) {
@@ -258,20 +258,20 @@ struct KRF : public ModulePass {
           }
         } else {
           // Do we want to output an internal tainted call or just recurse into it with no output?
-          for (auto &arg : callee->args()) {
+          for (const auto &arg : callee->args()) {
             if (arg.getArgNo() == use.getOperandNo()) {
-              for (Use &U : arg.uses()) {
+              for (const Use &U : arg.uses()) {
                 errCheck(U);
               }
               break;
             }
           }
         }
-        if (DILocation *Loc = call_inst->getDebugLoc()) { // Gets source info if exists
+        if (const DILocation *Loc = call_inst->getDebugLoc()) { // Gets source info if exists
           if (!Loc->isImplicitCode()) {
-            unsigned Line = Loc->getLine();
-            StringRef File = Loc->getFilename();
-            StringRef Dir = Loc->getDirectory();
+            const unsigned Line = Loc->getLine();
+            const StringRef File = Loc->getFilename();
+            const StringRef Dir = Loc->getDirectory();
             if (Json) {
               jresp.insert({"line", Line});
               jresp.insert({"file", File});
@@ -285,10 +285,10 @@ struct KRF : public ModulePass {
           Jtainted.push_back(std::move(jresp));
       }
     }
-    if (ICmpInst *cmp_inst = dyn_cast<ICmpInst>(I)) {
+    if (const ICmpInst *cmp_inst = dyn_cast<ICmpInst>(I)) {
       return true;
     }
-    for (auto &U : I->uses()) {
+    for (const auto &U : I->uses()) {
       if (errCheck(U))
         return true;
     }
@@ -304,7 +304,7 @@ struct KRF : public ModulePass {
       output << "KRF: entered module ";
       output.write_escaped(M.getName()) << '\n';
     }
-    for (auto &F : M) {
+    for (const auto &F : M) {
       if (F.isIntrinsic() || !F.isStrongDefinitionForLinker()) {
         continue;
       }
@@ -312,16 +312,16 @@ struct KRF : public ModulePass {
         output << "  entered function ";
         output.write_escaped((F.hasName()) ? F.getName() : "unname_function") << '\n';
       }
-      for (auto &B : F) {
+      for (const auto &B : F) {
         int lookingForErrno = 0;
-        for (auto &I : B) {
-          if (CallInst *call_inst = dyn_cast<CallInst>(&I)) {
-            Function *callee = call_inst->getCalledFunction();
+        for (const auto &I : B) {
+          if (const CallInst *call_inst = dyn_cast<CallInst>(&I)) {
+            const Function *callee = call_inst->getCalledFunction();
             if (lookingForErrno && callee && callee->hasName() &&
                 callee->getName().equals("__errno_location")) { // If call to errno
-              for (auto U : call_inst->users()) { // For every instruction that uses that result
-                if (LoadInst *load_inst = dyn_cast<LoadInst>(U)) { // Check if its a load
-                  for (auto V : // TODO: add weak taint analysis to get through `trunc` and similar
+              for (const auto U : call_inst->users()) { // For every instruction that uses that result
+                if (const LoadInst *load_inst = dyn_cast<LoadInst>(U)) { // Check if its a load
+                  for (const auto V : // TODO: add weak taint analysis to get through `trunc` and similar
                                 // instructions
                        load_inst->users()) {     // Then for every inst that uses *that* result
                     if (dyn_cast<ICmpInst>(V)) { // Check if its a comparison
@@ -350,7 +350,7 @@ struct KRF : public ModulePass {
             }
             int isChecked = 0;
             if (!call_inst->hasNUses(0)) {
-              for (auto &U : call_inst->uses()) {
+              for (const auto &U : call_inst->uses()) {
                 isChecked = errCheck(U); // TODO: also check pointer operands (e.g. mark the buffer
                                          // passed to read as tainted)
                 if (dyn_cast<ICmpInst>(U.getUser())) {
@@ -365,11 +365,11 @@ struct KRF : public ModulePass {
               if (!Json) {
                 output << "    warning: return value of " << callee->getName() << " is unused\n";
               }
-              if (DILocation *Loc = I.getDebugLoc()) { // Gets source info if exists
+              if (const DILocation *Loc = I.getDebugLoc()) { // Gets source info if exists
                 if (!Loc->isImplicitCode()) {
-                  unsigned Line = Loc->getLine();
-                  StringRef File = Loc->getFilename();
-                  StringRef Dir = Loc->getDirectory();
+                  const unsigned Line = Loc->getLine();
+                  const StringRef File = Loc->getFilename();
+                  const StringRef Dir = Loc->getDirectory();
                   if (Json) {
                     JRoot.push_back(JObject{
                         {"function", (F.hasName() ? F.getName() : "unname_function")},
