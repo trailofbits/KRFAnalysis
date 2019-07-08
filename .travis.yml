@@ -26,4 +26,4 @@ jobs:
         - cd build
         - cmake ../KRFAnalysisPass
         - cmake --build .
-	- cd ../tests && ./runTests.py
+        - cd ../tests && ./runTests.py
