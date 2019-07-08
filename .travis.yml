@@ -17,7 +17,7 @@ jobs:
       language: cpp
       compiler:
         - clang
-	- gcc
+        - gcc
       install:
         - sudo apt-get install -y cmake zlib1g-dev ninja-build wget software-properties-common
         - wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
