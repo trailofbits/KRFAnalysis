@@ -1,4 +1,6 @@
 # KRFAnalysis
+[![Build Status](https://travis-ci.com/trailofbits/KRFAnalysis.svg?branch=master)](https://travis-ci.com/trailofbits/KRFAnalysis)
+
 
 KRFAnalysis contains an LLVM pass and related scipts that test potential vulnerability to the tool [KRF](https://github.com/trailofbits/krf)
 by checking whether the result of a syscall is checked for errors.
