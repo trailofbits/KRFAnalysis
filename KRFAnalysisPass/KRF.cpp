@@ -27,6 +27,7 @@ struct KRF : public ModulePass {
   static char ID;
   std::error_code FD_EC;
   raw_fd_ostream output;
+  JArray Jtainted;
   KRF() : ModulePass(ID), output(Filename, FD_EC) {
     if (FD_EC) {
       errs() << "Failed to open file " << Filename << "\n";
@@ -203,6 +204,97 @@ struct KRF : public ModulePass {
                                                                  "write",
                                                                  "syscall"};
 
+  std::unordered_set<const User *> walkedU;
+  bool errCheck(const Use &use) {
+    const User *I = use.getUser();
+    if (walkedU.count(I)) { // use or user? could cause skipping if two arguments are tainted
+      return false;
+    } else {
+      walkedU.insert(I);
+    }
+    if (const StoreInst *str_inst = dyn_cast<StoreInst>(I)) {
+      for (const Use &U : str_inst->getPointerOperand()->uses()) {
+        if (errCheck(U)) {
+          return true;
+        }
+      }
+    }
+    if (const CallInst *call_inst = dyn_cast<CallInst>(I)) { // TODO: Add 'invoke' support as well
+      const Function *callee = call_inst->getCalledFunction();
+      if (callee && callee->hasName() && !callee->isIntrinsic()) {
+        JObject jresp;
+        if (blacklisted_functions.count(callee->getName().str())) {
+          if (Json) {
+            jresp = JObject{
+                {"function", callee->getName()}, {"tainted_operand", use.getOperandNo()},
+                {"external_function", false},    {"syscall", true},
+                {"variadic_internal", false},
+            };
+          } else {
+            output << "      tainted syscall " << callee->getName() << " with argument #"
+                   << use.getOperandNo() << '\n';
+          }
+        } else if (!callee->isStrongDefinitionForLinker()) { // An external function
+          if (Json) {
+            jresp = JObject{
+                {"function", callee->getName()}, {"tainted_operand", use.getOperandNo()},
+                {"external_function", true},     {"syscall", false},
+                {"variadic_internal", false},
+            };
+          } else {
+            output << "      tainted external function call to " << callee->getName()
+                   << "() with argument #" << use.getOperandNo() << '\n';
+          }
+        } else if (callee->isVarArg()) { // Can't trace operand #
+          if (Json) {
+            jresp = JObject{
+                {"function", callee->getName()}, {"tainted_operand", use.getOperandNo()},
+                {"external_function", false},    {"syscall", false},
+                {"variadic_internal", true},
+            };
+          } else {
+            output << "      tainted variadic function to " << callee->getName()
+                   << "() with argument #" << use.getOperandNo() << '\n';
+          }
+        } else {
+          // Do we want to output an internal tainted call or just recurse into it with no output?
+          for (const auto &arg : callee->args()) {
+            if (arg.getArgNo() == use.getOperandNo()) {
+              for (const Use &U : arg.uses()) {
+                errCheck(U);
+              }
+              break;
+            }
+          }
+        }
+        if (const DILocation *Loc = call_inst->getDebugLoc()) { // Gets source info if exists
+          if (!Loc->isImplicitCode()) {
+            const unsigned Line = Loc->getLine();
+            const StringRef File = Loc->getFilename();
+            const StringRef Dir = Loc->getDirectory();
+            if (Json) {
+              jresp.insert({"line", Line});
+              jresp.insert({"file", File});
+              jresp.insert({"dir", Dir});
+            } else {
+              output << "        at " << Dir << '/' << File << ':' << Line << '\n';
+            }
+          }
+        }
+        if (jresp.get("syscall")) // if object is non-empty
+          Jtainted.push_back(std::move(jresp));
+      }
+    }
+    if (const ICmpInst *cmp_inst = dyn_cast<ICmpInst>(I)) {
+      return true;
+    }
+    for (const auto &U : I->uses()) {
+      if (errCheck(U))
+        return true;
+    }
+    return false;
+  }
+
   bool runOnModule(Module &M) override {
     if (FD_EC) {
       return false;
@@ -213,7 +305,7 @@ struct KRF : public ModulePass {
       output.write_escaped(M.getName()) << '\n';
     }
     for (const auto &F : M) {
-      if (F.isIntrinsic()) {
+      if (F.isIntrinsic() || !F.isStrongDefinitionForLinker()) {
         continue;
       }
       if (!Json) {
@@ -230,7 +322,8 @@ struct KRF : public ModulePass {
               for (const auto U :
                    call_inst->users()) { // For every instruction that uses that result
                 if (const LoadInst *load_inst = dyn_cast<LoadInst>(U)) { // Check if its a load
-                  for (const auto V :
+                  for (const auto V : // TODO: add weak taint analysis to get through `trunc` and
+                                      // similar instructions
                        load_inst->users()) {     // Then for every inst that uses *that* result
                     if (dyn_cast<ICmpInst>(V)) { // Check if its a comparison
                       if (Json) {
@@ -258,8 +351,10 @@ struct KRF : public ModulePass {
             }
             int isChecked = 0;
             if (!call_inst->hasNUses(0)) {
-              for (const auto U : call_inst->users()) {
-                if (dyn_cast<ICmpInst>(U)) {
+              for (const auto &U : call_inst->uses()) {
+                isChecked = errCheck(U); // TODO: also check pointer operands (e.g. mark the buffer
+                                         // passed to read as tainted)
+                if (dyn_cast<ICmpInst>(U.getUser())) {
                   isChecked = 1; // Could add check on operands to see if its < 0 or == -1
                   break;
                 }
@@ -271,11 +366,11 @@ struct KRF : public ModulePass {
               if (!Json) {
                 output << "    warning: return value of " << callee->getName() << " is unused\n";
               }
-              if (DILocation *Loc = I.getDebugLoc()) { // Gets source info if exists
+              if (const DILocation *Loc = I.getDebugLoc()) { // Gets source info if exists
                 if (!Loc->isImplicitCode()) {
-                  unsigned Line = Loc->getLine();
-                  StringRef File = Loc->getFilename();
-                  StringRef Dir = Loc->getDirectory();
+                  const unsigned Line = Loc->getLine();
+                  const StringRef File = Loc->getFilename();
+                  const StringRef Dir = Loc->getDirectory();
                   if (Json) {
                     JRoot.push_back(JObject{
                         {"function", (F.hasName() ? F.getName() : "unname_function")},
@@ -307,7 +402,7 @@ struct KRF : public ModulePass {
       }   // BB iterator
     }     // Function iterator
     if (Json) {
-      JValue Jout(std::move(JRoot));
+      JValue Jout = JObject{{"syscalls", std::move(JRoot)}, {"tainted", std::move(Jtainted)}};
       output << Jout << '\n';
     }
     return false;

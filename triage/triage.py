@@ -154,7 +154,7 @@ def main():
         with open(fname) as f:
             json_data = f.read()
         data = json.loads(json_data)
-        analyze(data)
+        analyze(data["syscalls"])
     if not JSON:
         if low_arr:
             # print("[ ] Low severity:")
