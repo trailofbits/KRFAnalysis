@@ -15,9 +15,7 @@ jobs:
         - black --check triage/triage.py
     - stage: build
       language: cpp
-      compiler:
-        - clang
-        - gcc
+      compiler: clang
       install:
         - sudo apt-get install -y cmake zlib1g-dev ninja-build wget software-properties-common
         - wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
