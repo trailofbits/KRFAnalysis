@@ -319,10 +319,11 @@ struct KRF : public ModulePass {
             const Function *callee = call_inst->getCalledFunction();
             if (lookingForErrno && callee && callee->hasName() &&
                 callee->getName().equals("__errno_location")) { // If call to errno
-              for (const auto U : call_inst->users()) { // For every instruction that uses that result
+              for (const auto U :
+                   call_inst->users()) { // For every instruction that uses that result
                 if (const LoadInst *load_inst = dyn_cast<LoadInst>(U)) { // Check if its a load
-                  for (const auto V : // TODO: add weak taint analysis to get through `trunc` and similar
-                                // instructions
+                  for (const auto V : // TODO: add weak taint analysis to get through `trunc` and
+                                      // similar instructions
                        load_inst->users()) {     // Then for every inst that uses *that* result
                     if (dyn_cast<ICmpInst>(V)) { // Check if its a comparison
                       if (Json) {
