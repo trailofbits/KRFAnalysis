@@ -15,10 +15,8 @@ jobs:
         - black --check triage/triage.py
     - stage: build
       language: c++
-      matrix:
-        compiler:
-          - clang
-          - gcc
+      compiler:
+        - clang
       install:
         - sudo apt-get install -y cmake zlib1g-dev ninja-build wget software-properties-common
         - sudo apt-get remove -y llvm-7 llvm-7-dev
