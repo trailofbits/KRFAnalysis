@@ -1,0 +1,28 @@
+dist: xenial
+stages:
+  - lint
+  - build
+jobs:
+  include:
+    - stage: lint
+      language: python
+      python: "3.7"
+      install:
+        - sudo apt-get install clang-format
+        - pip install black
+      script:
+        - clang-format -i -style=file KRFAnalysisPass/*.cpp && git diff --exit-code
+        - black --check triage/triage.py
+    - stage: build
+      language: cpp
+      compiler: clang
+      install:
+        - sudo apt-get install -y cmake zlib1g-dev ninja-build wget software-properties-common
+        - wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+        - sudo add-apt-repository 'deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-8 main'
+        - sudo apt-get update && sudo apt-get -y install llvm-8 llvm-8-dev
+      script:
+        - mkdir build
+        - cd build
+        - cmake ../KRFAnalysisPass
+        - cmake --build .
