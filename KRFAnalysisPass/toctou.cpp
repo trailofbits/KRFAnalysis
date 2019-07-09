@@ -60,7 +60,8 @@ struct ToctouPass : public ModulePass {
             const Value *tracked;
             if (callee->getName().equals("access")) {
               tracked = call_inst->getOperand(0); // see access(2)
-            } else if (callee->getName().equals("mktemp")) {
+            } else if (callee->getName().equals("mktemp") || callee->getName().equals("tmpnam") ||
+                       callee->getName().equals("tempnam")) {
               tracked = call_inst;
             } else {
               continue;
