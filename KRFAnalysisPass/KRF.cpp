@@ -219,7 +219,7 @@ struct KRF : public ModulePass {
         }
       }
     }
-    if (const CallInst *call_inst = dyn_cast<CallInst>(I)) { // TODO: Add 'invoke' support as well
+    if (const CallBase *call_inst = dyn_cast<CallBase>(I)) {
       const Function *callee = call_inst->getCalledFunction();
       if (callee && callee->hasName() && !callee->isIntrinsic()) {
         JObject jresp;
@@ -315,7 +315,7 @@ struct KRF : public ModulePass {
       for (const auto &B : F) {
         int lookingForErrno = 0;
         for (const auto &I : B) {
-          if (const CallInst *call_inst = dyn_cast<CallInst>(&I)) {
+          if (const CallBase *call_inst = dyn_cast<CallBase>(&I)) {
             const Function *callee = call_inst->getCalledFunction();
             if (lookingForErrno && callee && callee->hasName() &&
                 callee->getName().equals("__errno_location")) { // If call to errno
