@@ -11,8 +11,8 @@ jobs:
         - sudo apt-get install clang-format
         - pip install black
       script:
-        - clang-format -i -style=file KRFAnalysisPass/*.cpp && git diff --exit-code
-        - black --check triage/triage.py
+        - clang-format -i -style=file KRFAnalysisPass/*.cpp tests/*.cpp && git diff --exit-code
+        - black --check triage/triage.py tests/runTests.py
     - stage: build
       language: cpp
       compiler: clang
@@ -26,3 +26,4 @@ jobs:
         - cd build
         - cmake ../KRFAnalysisPass
         - cmake --build .
+        - cd ../tests && ./runTests.py
