@@ -55,18 +55,28 @@ struct ToctouPass : public ModulePass {
         for (const auto &I : B) {
           if (const CallBase *call_inst = dyn_cast<CallBase>(&I)) {
             const Function *callee = call_inst->getCalledFunction();
-            if (!callee || !callee->hasName() || !(callee->getName().equals("access")))
+            if (!callee || !callee->hasName())
               continue;
-            const auto &filename = call_inst->getOperand(0); // see access(2)
-            for (const auto &V : filename->uses()) {
-              auto U = V.getUser();
+            const Value *tracked;
+            if (callee->getName().equals("access")) {
+              tracked = call_inst->getOperand(0); // see access(2)
+            } else if (callee->getName().equals("mktemp")) {
+              tracked = call_inst;
+            } else {
+              continue;
+            }
+            for (const auto &V : tracked->uses()) {
+              const auto U = V.getUser();
               if (const CallBase *second_call = dyn_cast<CallBase>(U)) {
                 const Function *second_callee = second_call->getCalledFunction();
                 if (!second_callee || !second_callee->hasName() ||
                     !(second_callee->getName().equals("open")))
                   continue;
+                std::string toctouTypeBacker;
+                raw_string_ostream toctouType(toctouTypeBacker);
+                toctouType << callee->getName() << '/' << second_callee->getName();
                 if (!Json)
-                  output << "    Access/read TOC/TOU found!\n";
+                  output << "    " << toctouType.str() << " TOC/TOU found!\n";
                 if (const DILocation *Loc = I.getDebugLoc()) { // Gets source info if exists
                   if (!Loc->isImplicitCode()) {
                     const unsigned Line = Loc->getLine();
@@ -76,7 +86,7 @@ struct ToctouPass : public ModulePass {
                       JRoot.push_back(JObject{
                           {"function", (F.hasName() ? F.getName() : "unname_function")},
                           {"module", M.getName()},
-                          {"type", "access/read"},
+                          {"type", toctouType.str()},
                           {"line", Line},
                           {"file", File},
                           {"dir", Dir},
@@ -90,7 +100,7 @@ struct ToctouPass : public ModulePass {
                     JRoot.push_back(JObject{
                         {"function", (F.hasName() ? F.getName() : "unname_function")},
                         {"module", M.getName()},
-                        {"type", "access/read"},
+                        {"type", toctouType.str()},
                     });
                   }
                 }
