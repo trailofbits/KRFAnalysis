@@ -22,6 +22,9 @@ using JValue = json::Value;
 
 cl::opt<bool> Json("krf-json", cl::desc("Print output in json format"));
 cl::opt<std::string> Filename("krf-output", cl::desc("Output file"), cl::init("krfpass.out"));
+cl::opt<bool> TaintPointerArgs(
+    "krf-taint-pointer-args",
+    cl::desc("Marks pointers passed to syscalls as tainted - adds many false positives"));
 
 struct KRF : public ModulePass {
   static char ID;
@@ -352,11 +355,23 @@ struct KRF : public ModulePass {
             int isChecked = 0;
             if (!call_inst->hasNUses(0)) {
               for (const auto &U : call_inst->uses()) {
-                isChecked = errCheck(U); // TODO: also check pointer operands (e.g. mark the buffer
-                                         // passed to read as tainted)
+                isChecked = errCheck(U);
                 if (dyn_cast<ICmpInst>(U.getUser())) {
                   isChecked = 1; // Could add check on operands to see if its < 0 or == -1
                   break;
+                }
+              }
+            }
+            if (TaintPointerArgs) {
+              // If an argument is a pointer, check its uses (how to distinguish future uses...
+              // could be in loop?)
+              for (const auto &A : call_inst->operands()) {
+                if (A->getType()->isPointerTy()) {
+                  for (const auto &U : A->uses()) {
+                    if (U.getUser() == call_inst) // Ignore if its call_inst
+                      continue;
+                    errCheck(U);
+                  }
                 }
               }
             }
