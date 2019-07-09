@@ -58,8 +58,12 @@ struct ToctouPass : public ModulePass {
             if (!callee || !callee->hasName())
               continue;
             const Value *tracked;
-            if (callee->getName().equals("access")) {
-              tracked = call_inst->getOperand(0); // see access(2)
+            if (callee->getName().equals("access") || callee->getName().equals("stat") ||
+                callee->getName().equals("lstat") || callee->getName().equals("creat") ||
+                callee->getName().equals("mknod") || callee->getName().equals("link") ||
+                callee->getName().equals("symlink") || callee->getName().equals("mkdir") ||
+                callee->getName().equals("unlink") || callee->getName().equals("rmdir")) {
+              tracked = call_inst->getOperand(0); // see access(2), stat(2)
             } else if (callee->getName().equals("mktemp") || callee->getName().equals("tmpnam") ||
                        callee->getName().equals("tempnam")) {
               tracked = call_inst;
@@ -68,10 +72,27 @@ struct ToctouPass : public ModulePass {
             }
             for (const auto &V : tracked->uses()) {
               const auto U = V.getUser();
+              if (U == call_inst)
+                continue;
               if (const CallBase *second_call = dyn_cast<CallBase>(U)) {
                 const Function *second_callee = second_call->getCalledFunction();
                 if (!second_callee || !second_callee->hasName() ||
-                    !(second_callee->getName().equals("open")))
+                    (!(second_callee->getName().equals("open")) &&
+                     !second_callee->getName().equals("chmod") &&
+                     !second_callee->getName().equals("chown") &&
+                     !second_callee->getName().equals("chdir") &&
+                     !second_callee->getName().equals("chroot") &&
+                     !second_callee->getName().equals("truncate") &&
+                     !second_callee->getName().equals("rename") &&
+                     !second_callee->getName().equals("symlink") &&
+                     !second_callee->getName().equals("link") &&
+                     !second_callee->getName().equals("creat") &&
+                     !second_callee->getName().equals("utime") &&
+                     !second_callee->getName().equals("utimes") &&
+                     !second_callee->getName().equals("mknod") &&
+                     !second_callee->getName().equals("mkdir") &&
+                     !second_callee->getName().equals("execve") &&
+                     !second_callee->getName().equals("mount")))
                   continue;
                 std::string toctouTypeBacker;
                 raw_string_ostream toctouType(toctouTypeBacker);
