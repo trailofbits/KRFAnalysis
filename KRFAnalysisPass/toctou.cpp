@@ -94,44 +94,60 @@ struct ToctouPass : public ModulePass {
                      !second_callee->getName().equals("execve") &&
                      !second_callee->getName().equals("mount")))
                   continue;
+                JObject data;
                 std::string toctouTypeBacker;
                 raw_string_ostream toctouType(toctouTypeBacker);
                 toctouType << callee->getName() << '/' << second_callee->getName();
-                if (!Json)
+                if (Json) {
+                  data = JObject{
+                      {"function", (F.hasName() ? F.getName() : "unname_function")},
+                      {"module", M.getName()},
+                      {"type", toctouType.str()},
+                  };
+                } else {
                   output << "    " << toctouType.str() << " TOC/TOU found!\n";
+                }
                 if (const DILocation *Loc = I.getDebugLoc()) { // Gets source info if exists
                   if (!Loc->isImplicitCode()) {
                     const unsigned Line = Loc->getLine();
                     const StringRef File = Loc->getFilename();
                     const StringRef Dir = Loc->getDirectory();
                     if (Json) {
-                      JRoot.push_back(JObject{
-                          {"function", (F.hasName() ? F.getName() : "unname_function")},
-                          {"module", M.getName()},
-                          {"type", toctouType.str()},
-                          {"line", Line},
-                          {"file", File},
-                          {"dir", Dir},
-                      });
+                      data.insert({"check", JObject{
+                                                {"line", Line},
+                                                {"file", File},
+                                                {"dir", Dir},
+                                            }});
                     } else {
-                      output << "      at " << Dir << '/' << File << ':' << Line << '\n';
+                      output << "      check at " << Dir << '/' << File << ':' << Line << '\n';
                     }
                   }
-                } else {
-                  if (Json) {
-                    JRoot.push_back(JObject{
-                        {"function", (F.hasName() ? F.getName() : "unname_function")},
-                        {"module", M.getName()},
-                        {"type", toctouType.str()},
-                    });
+                }
+                if (const DILocation *Loc =
+                        second_call->getDebugLoc()) { // Gets source info if exists
+                  if (!Loc->isImplicitCode()) {
+                    const unsigned Line = Loc->getLine();
+                    const StringRef File = Loc->getFilename();
+                    const StringRef Dir = Loc->getDirectory();
+                    if (Json) {
+                      data.insert({"use", JObject{
+                                              {"line", Line},
+                                              {"file", File},
+                                              {"dir", Dir},
+                                          }});
+                    } else {
+                      output << "      use at " << Dir << '/' << File << ':' << Line << '\n';
+                    }
                   }
                 }
+                JRoot.push_back(std::move(data));
               }
             }
           }
         }
       }
     }
+
     if (Json) {
       JValue Jout = std::move(JRoot);
       output << Jout << '\n';
