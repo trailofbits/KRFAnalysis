@@ -70,7 +70,8 @@ struct ToctouPass : public ModulePass {
             } else {
               continue;
             }
-            for (const auto &V : tracked->uses()) {
+            for (const auto &V : tracked->uses()) { // TODO: How to enforce correct ordering?
+              // Could enforce only the uses after call_inst, but what about loops?
               const auto U = V.getUser();
               if (U == call_inst)
                 continue;
