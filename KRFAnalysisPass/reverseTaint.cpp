@@ -209,7 +209,7 @@ struct ReverseTaint : public ModulePass {
       if (!func->isStrongDefinitionForLinker()) { // needs to be defined to search through
         errs() << "Strong definition of " << StackTrace << " is not in module " << M.getName()
                << '\n';
-        return NULL;
+        return false;
       }
       const int line = IgnoreLine ? 0 : std::stoi(functions[functionDepth + 1]);
       const Function *func2 =
@@ -247,6 +247,7 @@ struct ReverseTaint : public ModulePass {
       output << "REVERSETAINT: entered module ";
       output.write_escaped(M.getName()) << '\n';
     }
+    return false;
   } // End of runOnModule()
 };  // end of struct REVERSETAINT
 } // end of anonymous namespace

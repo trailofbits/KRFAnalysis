@@ -226,7 +226,7 @@ if __name__ == "__main__":
             ).returncode
             != 0
         ):
-            print("[x]", filesteam, "Pass failed")
+            print("[x]", filestem, "Pass failed")
             continue
         failed = checkPassOutput(filestem) or failed
 
