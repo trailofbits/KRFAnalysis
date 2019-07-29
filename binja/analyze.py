@@ -7,7 +7,7 @@ import os
 
 def analyzeCrash(core):
     print("Analyzing crash", core)
-    with open(core, "w") as f:
+    with open(core, "r") as f:
         crash_data = json.loads(f.read())
     for file in crash_data:
         print("  Running on file", file)
