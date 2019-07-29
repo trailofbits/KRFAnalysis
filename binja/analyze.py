@@ -1,17 +1,18 @@
-import krf
 import json
 import tarfile
 import sys
 import os
+import krf
 
 
 def analyzeCrash(core):
     print("Analyzing crash", core)
-    with open(core, "r") as f:
+    with open(core) as f:
         crash_data = json.loads(f.read())
     for file in crash_data:
+        data = [int(x, 16) for x in crash_data[file]]
         print("  Running on file", file)
-        binaries[file].run(crash_data[file])
+        binaries[file].run(data)
 
 
 if __name__ == "__main__":
@@ -27,4 +28,4 @@ if __name__ == "__main__":
         binaries[filename] = krf.KRFAnalysis("krfanalysis/binaries/" + filename)
     print("Done")
     for filename in os.listdir("krfanalysis/cores"):
-        analyzeCrash(filename)
+        analyzeCrash("krfanalysis/cores/" + filename)
