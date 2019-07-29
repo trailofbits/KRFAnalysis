@@ -24,10 +24,11 @@ class KRFAnalysis(object):
                     var_stack.append(call.params[i].src)
             except IndexError:
                 log.warning(
-                    "Calling convention error: expected an argument #" + str(i),
-                    "but there are only",
-                    len(call.params),
-                    "arguments. Ignoring.",
+                    "Calling convention error: expected an argument #"
+                    + str(i)
+                    + " but there are only "
+                    + str(len(call.params))
+                    + " arguments. Ignoring."
                 )
         while len(var_stack) > 0:
             var = var_stack.pop()
@@ -38,7 +39,7 @@ class KRFAnalysis(object):
             try:
                 decl = func.get_ssa_var_definition(var)
             except AttributeError:
-                log.warning("Failed on var", var, "...trying normal variable def")
+                log.warning("Failed on var " + str(var) + " ...trying normal variable def")
                 decl = func[func.get_var_definitions(var)[0]]
             if decl is None:  # It's probably an argument
                 # print("Argument", var.var.name, "tainted from function call")
