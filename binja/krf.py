@@ -19,9 +19,16 @@ class KRFAnalysis(object):
         var_stack = []
         tainted_args = []
         for i in tainted:  # Only if in tainted args
-            if call.params[i].operation == MediumLevelILOperation.MLIL_VAR_SSA:
-                var_stack.append(call.params[i].src)
-
+            try:
+                if call.params[i].operation == MediumLevelILOperation.MLIL_VAR_SSA:
+                    var_stack.append(call.params[i].src)
+            except IndexError:
+                log.warning(
+                    "Calling convention error: expected an argument #" + str(i),
+                    "but there are only",
+                    len(call.params),
+                    "arguments. Ignoring.",
+                )
         while len(var_stack) > 0:
             var = var_stack.pop()
             if var in visited_instructions:
@@ -31,7 +38,7 @@ class KRFAnalysis(object):
             try:
                 decl = func.get_ssa_var_definition(var)
             except AttributeError:
-                print("Failed on var", var, "...trying normal variable def")
+                log.warning("Failed on var", var, "...trying normal variable def")
                 decl = func[func.get_var_definitions(var)[0]]
             if decl is None:  # It's probably an argument
                 # print("Argument", var.var.name, "tainted from function call")
@@ -69,20 +76,20 @@ class KRFAnalysis(object):
 
         while ((len(rips) - index) > 1) and len(taintedArgs) > 0:
             try:
-                func = self.bv.get_functions_containing(rips[index + 1] - startAddr)[
-                    0
-                ].medium_level_il
-                call = func[func.get_instruction_start(rips[index + 1] - startAddr) - 1].ssa_form
+                func = self.bv.get_functions_containing(rips[index] - startAddr)[0].medium_level_il
+                call = func[func.get_instruction_start(rips[index] - startAddr) - 1].ssa_form
+                if call.operation != MediumLevelILOperation.MLIL_CALL_SSA:
+                    index += 1
+                    continue
                 func = func.ssa_form
-                func2 = self.bv.get_functions_containing(rips[index] - startAddr)[0]
-                func2_ptr = func2.start  # ptr to front
-                print("Searching through function", func.source_function.name, "for", func2.name)
+                # func2 = self.bv.get_functions_containing(rips[index] - startAddr)[0]
+                print("Searching through function", func.source_function.name)
                 print("call:", call)
             except AttributeError:
-                raise Exception("Could not find function containing {:x}".format(inst_ptr))
+                raise Exception("Could not find function containing {:x}".format(rips[index]))
 
             if numArgs is None:  # Add all parameters if not set (need to be set for libc stuff)
-                taintedArgs = range(len(func2.function_type.parameters))
+                taintedArgs = range(len(call.params))
             taintedArgs = self.checkFunction(func, call, taintedArgs)
             # print(taintedArgs)
             index += 1
@@ -91,3 +98,5 @@ class KRFAnalysis(object):
             print("Parameters to top level function tainted:", taintedArgs)
         else:
             print("All paths checked")
+
+        return taintedArgs
