@@ -12,7 +12,7 @@ jobs:
         - pip install black
       script:
         - clang-format -i -style=file KRFAnalysisPass/*.cpp tests/*.cpp && git diff --exit-code
-        - black --check triage/triage.py tests/runTests.py
+        - black --check triage/triage.py tests/runTests.py binja/*.py
     - stage: build
       language: cpp
       compiler: clang
