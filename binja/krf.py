@@ -80,15 +80,21 @@ class KRFAnalysis(object):
                 func = self.bv.get_functions_containing(rips[index] - startAddr)[0].medium_level_il
                 call = func.get_instruction_start(rips[index] - startAddr)  # Get index
                 if call is None:
+                    call = func.source_function.get_low_level_il_at(
+                        rips[index] - startAddr
+                    ).mmlil.ssa_form.instr_index
+                    call = func.source_function.llil.mmlil.ssa_form[
+                        call - 1
+                    ].llil.mlil.ssa_form  # Hacky as heck
                     log.warning(
                         "Could not find MLIL SSA instruction for "
                         + hex(rips[index])
-                        + ", continuing"
+                        + ", using MMLIL SSA"
                     )
-                    index += 1
-                    continue
-                call = func[call - 1].ssa_form
+                else:
+                    call = func[call - 1].ssa_form
                 if call.operation != MediumLevelILOperation.MLIL_CALL_SSA:
+                    log.warning("Found non-call... skipping")
                     index += 1
                     continue
                 func = func.ssa_form
