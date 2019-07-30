@@ -78,7 +78,16 @@ class KRFAnalysis(object):
         while ((len(rips) - index) > 1) and len(taintedArgs) > 0:
             try:
                 func = self.bv.get_functions_containing(rips[index] - startAddr)[0].medium_level_il
-                call = func[func.get_instruction_start(rips[index] - startAddr) - 1].ssa_form
+                call = func.get_instruction_start(rips[index] - startAddr)  # Get index
+                if call is None:
+                    log.warning(
+                        "Could not find MLIL SSA instruction for "
+                        + hex(rips[index])
+                        + ", continuing"
+                    )
+                    index += 1
+                    continue
+                call = func[call - 1].ssa_form
                 if call.operation != MediumLevelILOperation.MLIL_CALL_SSA:
                     index += 1
                     continue
