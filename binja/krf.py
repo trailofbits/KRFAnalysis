@@ -18,6 +18,7 @@ class KRFAnalysis(object):
         visited_instructions = set()
         var_stack = []
         tainted_args = []
+        # Set up the intially tainted vars
         for i in tainted:  # Only if in tainted args
             try:
                 if call.params[i].operation == MediumLevelILOperation.MLIL_VAR_SSA:
@@ -30,17 +31,23 @@ class KRFAnalysis(object):
                     + str(len(call.params))
                     + " arguments. Ignoring."
                 )
+
+        # Continously run analysis while elements are in the stack
         while len(var_stack) > 0:
             var = var_stack.pop()
             if var in visited_instructions:
                 continue
             else:
                 visited_instructions.add(var)
+
+            # Get variable declaration
             try:
                 decl = func.get_ssa_var_definition(var)
             except AttributeError:
                 log.warning("Failed on var " + str(var) + " ...trying normal variable def")
                 decl = func[func.get_var_definitions(var)[0]]
+
+            # Check if its an argument
             if decl is None:  # It's probably an argument
                 # print("Argument", var.var.name, "tainted from function call")
                 for i, param in enumerate(func.source_function.function_type.parameters):
@@ -48,6 +55,8 @@ class KRFAnalysis(object):
                         # print("  Argument #:", i)
                         tainted_args.append(i)
                 continue
+
+            # Check if its a function call
             if decl.operation == MediumLevelILOperation.MLIL_CALL_SSA:
                 if decl.dest.value.is_constant:
                     func_called = self.bv.get_function_at(decl.dest.value.value)
@@ -57,6 +66,7 @@ class KRFAnalysis(object):
                 else:
                     print("Tainted by indirect call at instruction", hex(decl.address))
                 continue
+
             # Otherwise, recurse into it's parents
             for v in decl.vars_read:
                 var_stack.append(v)
@@ -73,38 +83,40 @@ class KRFAnalysis(object):
         elif numArgs is not None:
             taintedArgs = range(numArgs)
         else:
-            taintedArgs = [1]  # to pass while loop check
+            taintedArgs = [1]  # to pass while loop check, gets overwritten later
 
         while ((len(rips) - index) > 1) and len(taintedArgs) > 0:
             try:
-                func = self.bv.get_functions_containing(rips[index] - startAddr)[0].medium_level_il
+                func = self.bv.get_functions_containing(rips[index] - startAddr)[
+                    0
+                ].medium_level_il  # Containing function
                 call = func.get_instruction_start(rips[index] - startAddr)  # Get index
-                if call is None:
+                if call is None:  # MMLIL workaround for optimized out MLIL
                     call = func.source_function.get_low_level_il_at(
                         rips[index] - startAddr
                     ).mmlil.ssa_form.instr_index
                     call = func.source_function.llil.mmlil.ssa_form[
                         call - 1
-                    ].llil.mlil.ssa_form  # Hacky as heck
+                    ].llil.mlil.ssa_form  # Hacky as heck, mlil form is not guarunteed.
                     log.warning(
                         "Could not find MLIL SSA instruction for "
                         + hex(rips[index])
                         + ", using MMLIL SSA"
                     )
-                else:
+                else:  # Normal case: get instruction before IP
                     call = func[call - 1].ssa_form
                 if call.operation != MediumLevelILOperation.MLIL_CALL_SSA:
                     log.warning("Found non-call... skipping")
                     index += 1
                     continue
                 func = func.ssa_form
-                # func2 = self.bv.get_functions_containing(rips[index] - startAddr)[0]
+
                 print("Searching through function", func.source_function.name)
                 print("call:", call)
             except AttributeError:
                 raise Exception("Could not find function containing {:x}".format(rips[index]))
 
-            if numArgs is None:  # Add all parameters if not set (need to be set for libc stuff)
+            if numArgs is None:  # Add all parameters if not manually set
                 taintedArgs = range(len(call.params))
             taintedArgs = self.checkFunction(func, call, taintedArgs)
             # print(taintedArgs)
