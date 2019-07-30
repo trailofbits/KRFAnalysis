@@ -11,9 +11,9 @@ def analyzeCrash(core):
         crash_data = json.loads(f.read())
     taintedArgs = None
     for file in crash_data:
-        data = [int(x, 16) for x in crash_data[file]]
-        print("  Running on file", file)
-        taintedArgs = binaries[file].run(*data, taintedArgs=taintedArgs)
+        data = [int(x, 16) for x in file["stack"]]
+        print("  Running on file", file["file"])
+        taintedArgs = binaries[file["file"]].run(*data, taintedArgs=taintedArgs)
 
 
 if __name__ == "__main__":

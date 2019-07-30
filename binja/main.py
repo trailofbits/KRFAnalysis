@@ -20,7 +20,7 @@ def analyze(exe, core_file):
         .split("\n")[4:]
     )
 
-    files = {}
+    files = []
     for l in lines:
         a = l.split()
         if len(a) != 2:
@@ -29,9 +29,9 @@ def analyze(exe, core_file):
         file = a[1]
         files_set.add(file)
         file = file.split("/")[-1]
-        if file not in files:
-            files[file] = []
-        files[file].append(addr)
+        if len(files) == 0 or files[-1]["file"] != file:
+            files.append({"file": file, "stack": []})
+        files[-1]["stack"].append(addr)
 
     return files
 
