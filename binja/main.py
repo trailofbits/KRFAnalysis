@@ -65,7 +65,7 @@ if __name__ == "__main__":
     timestamp = str(time.time())
     dirname = "krfanalysis-" + binaryname + "-" + timestamp
 
-    # Writes to this directory: `pwd`/krfanalysis
+    # Writes to this directory: `pwd`/dirname
     os.makedirs(dirname + "/binaries")
     os.mkdir(dirname + "/cores")
 

@@ -10,7 +10,6 @@ data = gdb.execute("info proc mappings", False, True).split("\n")[3:-1]
 for l in data:
     columns = l.split()
     ret = [extract(x.strip()) for x in columns]
-    # print(ret)
     mapping.append(ret)
 
 
