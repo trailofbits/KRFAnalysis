@@ -22,11 +22,11 @@ def do_nothing(bv, inst):
         try:
             decl = func.get_ssa_var_definition(var)
         except AttributeError:
-            print("Failed on var " + str(var) + " ...trying normal variable def")
+            log.log_info("Failed on var " + str(var) + " ...trying normal variable def")
             decl = func[func.get_var_definitions(var)[0]]
         if decl is None:  # It's probably an argument
             tainted_args.append(var.var.name)
-            print("Argument", var.var.name, "tainted from function call")
+            log.log_info("Argument " + var.var.name + " tainted from function call")
             continue
         if decl.operation == MediumLevelILOperation.MLIL_CALL_SSA:
             func.source_function.set_user_instr_highlight(
@@ -34,9 +34,15 @@ def do_nothing(bv, inst):
             )
             if decl.dest.value.is_constant:
                 func_called = bv.get_function_at(decl.dest.value.value)
-                print("Tainted by call to", func_called.name, "(", hex(decl.dest.value.value), ")")
+                log.log_info(
+                    "Tainted by call to "
+                    + str(func_called.name)
+                    + " ("
+                    + hex(decl.dest.value.value)
+                    + ")"
+                )
             else:
-                print("Tainted by indirect call at instruction", hex(decl.address))
+                log.log_info("Tainted by indirect call at instruction " + hex(decl.address))
             continue
         # Otherwise, recurse into it's parents
         for v in decl.vars_read:

@@ -49,7 +49,7 @@ class KRFAnalysis:
 
             # Check if its an argument
             if decl is None:  # It's probably an argument
-                log.debug("Argument" + var.var.name + "tainted from function call")
+                log.debug("Argument " + var.var.name + " tainted from function call")
                 for i, param in enumerate(func.source_function.function_type.parameters):
                     if param.name == var.var.name:
                         tainted_args.append(i)
