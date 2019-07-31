@@ -24,7 +24,7 @@ def do_nothing(bv, inst):
         except AttributeError:
             log.log_info("Failed on var " + str(var) + " ...trying normal variable def")
             decl = func[func.get_var_definitions(var)[0]]
-        if decl is None:  # It's probably an argument
+        if decl is None:  # Its probably an argument
             tainted_args.append(var.var.name)
             log.log_info("Argument " + var.var.name + " tainted from function call")
             continue
