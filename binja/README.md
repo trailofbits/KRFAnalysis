@@ -26,5 +26,8 @@ python3 analyze.py path/to/krfanalysis.tar.gz
 It uses the class defined in `krf.py` in order to do 'reverse taint analysis' on data in the tarball.
 It will unpack the tarball into whatever directory it is executed from.
 
+### Binary Ninja API
+Binary Ninja can be added to the python path using `export PYTHONPATH=$PYTHONPATH:/Applications/Binary\ Ninja.app/Contents/Resources/python` in your shell profile. Requires headless mode.
+
 ## Binary Ninja Plugin
 The binary ninja plugin is located in the `taint_plugin` subdirectory, and contains its own documentation in that directory.
