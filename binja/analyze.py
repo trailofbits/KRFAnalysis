@@ -20,15 +20,17 @@ def analyze_crash(core):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage:", sys.argv[0], "<path/to/krfanalysis.tar.gz>")
+        print("Usage:", sys.argv[0], "<path/to/krfanalysis-{binary}-{timestamp}.tar.gz>")
         sys.exit(1)
     with tarfile.open(sys.argv[1], "r:gz") as tar:
         tar.extractall()
 
+    tarball = os.path.basename(sys.argv[1])
+    tarball = tarball[:-7]  # Remove .tar.gz extension
     binaries = {}
-    for filename in os.listdir("krfanalysis/binaries"):
+    for filename in os.listdir(tarball + "/binaries"):
         print("Analyzing binary", filename)
-        binaries[filename] = krf.KRFAnalysis("krfanalysis/binaries/" + filename)
+        binaries[filename] = krf.KRFAnalysis(tarball + "/binaries/" + filename)
     print("Done")
-    for filename in os.listdir("krfanalysis/cores"):
-        analyze_crash("krfanalysis/cores/" + filename)
+    for filename in os.listdir(tarball + "/cores"):
+        analyze_crash(tarball + "/cores/" + filename)
