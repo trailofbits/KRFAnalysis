@@ -6,7 +6,7 @@ import binaryninja as bn
 from binaryninja.mediumlevelil import MediumLevelILOperation
 
 
-class KRFAnalysis(object):
+class KRFAnalysis:
     def __init__(self, filename):
         self.filename = filename
         self.bv = bn.BinaryViewType["ELF"].open(filename)
@@ -49,10 +49,9 @@ class KRFAnalysis(object):
 
             # Check if its an argument
             if decl is None:  # It's probably an argument
-                # print("Argument", var.var.name, "tainted from function call")
+                log.debug("Argument" + var.var.name + "tainted from function call")
                 for i, param in enumerate(func.source_function.function_type.parameters):
                     if param.name == var.var.name:
-                        # print("  Argument #:", i)
                         tainted_args.append(i)
                 continue
 
@@ -112,14 +111,14 @@ class KRFAnalysis(object):
                 func = func.ssa_form
 
                 print("Searching through function", func.source_function.name)
-                print("call:", call)
+                log.debug("call: " + str(call))
             except AttributeError:
                 raise Exception("Could not find function containing {:x}".format(rips[index]))
 
             if numArgs is None:  # Add all parameters if not manually set
                 taintedArgs = range(len(call.params))
             taintedArgs = self.checkFunction(func, call, taintedArgs)
-            # print(taintedArgs)
+            log.debug(taintedArgs)
             index += 1
 
         if len(taintedArgs) > 0:
