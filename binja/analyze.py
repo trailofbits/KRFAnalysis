@@ -5,7 +5,7 @@ import os
 import krf
 
 
-def analyzeCrash(core):
+def analyze_crash(core):
     print("Analyzing crash", core)
     with open(core) as f:
         crash_data = json.loads(f.read())
@@ -31,4 +31,4 @@ if __name__ == "__main__":
         binaries[filename] = krf.KRFAnalysis("krfanalysis/binaries/" + filename)
     print("Done")
     for filename in os.listdir("krfanalysis/cores"):
-        analyzeCrash("krfanalysis/cores/" + filename)
+        analyze_crash("krfanalysis/cores/" + filename)
