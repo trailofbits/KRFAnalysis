@@ -28,13 +28,12 @@ if __name__ == "__main__":
         sys.exit(1)
     with tarfile.open(sys.argv[1], "r:gz") as tar:
         tar.extractall()
+        dirname = tar.getnames()[0]
 
-    tarball = os.path.basename(sys.argv[1])
-    tarball = tarball[:-7]  # Remove .tar.gz extension
     binaries = {}
-    for filename in os.listdir(tarball + "/binaries"):
+    for filename in os.listdir(dirname + "/binaries"):
         print("Analyzing binary", filename)
-        binaries[filename] = krf.KRFAnalysis(tarball + "/binaries/" + filename)
+        binaries[filename] = krf.KRFAnalysis(dirname + "/binaries/" + filename)
     print("Done")
-    for filename in os.listdir(tarball + "/cores"):
-        analyze_crash(tarball + "/cores/" + filename)
+    for filename in os.listdir(dirname + "/cores"):
+        analyze_crash(dirname + "/cores/" + filename)
