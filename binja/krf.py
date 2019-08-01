@@ -14,24 +14,27 @@ class KRFAnalysis:
         self.bv.update_analysis_and_wait()
         log.debug("Analysis finished")
 
-    def checkFunction(self, func, call, tainted):
+    def checkFunction(self, func, call, tainted, frameZero=False):
         visited_instructions = set()
         var_stack = []
         tainted_args = []
         # Set up the intially tainted vars
-        for i in tainted:  # Only if in tainted args
-            try:
-                if call.params[i].operation == MediumLevelILOperation.MLIL_VAR_SSA:
-                    var_stack.append(call.params[i].src)
-            except IndexError:
-                log.warning(
-                    "Calling convention error: expected an argument #"
-                    + str(i)
-                    + " but there are only "
-                    + str(len(call.params))
-                    + " arguments. Ignoring."
-                )
-
+        if frameZero:
+            for v in call.vars_read:
+                var_stack.append(v)
+        else:
+            for i in tainted:  # Only if in tainted args
+                try:
+                    if call.params[i].operation == MediumLevelILOperation.MLIL_VAR_SSA:
+                        var_stack.append(call.params[i].src)
+                except IndexError:
+                    log.warning(
+                        "Calling convention error: expected an argument #"
+                        + str(i)
+                        + " but there are only "
+                        + str(len(call.params))
+                        + " arguments. Ignoring."
+                    )
         # Continously run analysis while elements are in the stack
         while len(var_stack) > 0:
             var = var_stack.pop()
@@ -72,7 +75,7 @@ class KRFAnalysis:
 
         return tainted_args
 
-    def run(self, *rips, numArgs=None, startAddr=0, taintedArgs=None):
+    def run(self, *rips, numArgs=None, startAddr=0, taintedArgs=None, frameZero=False):
         # Pass in instruction pointers, starting from the lowest frame and going up
         # numArgs in the number of args passed to the lowest frame, needed for libc
         # startAddr is subtracted from the rips
@@ -84,7 +87,7 @@ class KRFAnalysis:
         else:
             taintedArgs = [1]  # to pass while loop check, gets overwritten later
 
-        while ((len(rips) - index) > 1) and len(taintedArgs) > 0:
+        while index < len(rips) and len(taintedArgs) > 0:
             try:
                 func = self.bv.get_functions_containing(rips[index] - startAddr)[
                     0
@@ -95,7 +98,7 @@ class KRFAnalysis:
                         rips[index] - startAddr
                     ).mmlil.ssa_form.instr_index
                     call = func.source_function.llil.mmlil.ssa_form[
-                        call - 1
+                        call if frameZero else (call - 1)
                     ].llil.mlil.ssa_form  # Hacky as heck, mlil form is not guarunteed.
                     log.warning(
                         "Could not find MLIL SSA instruction for "
@@ -103,11 +106,12 @@ class KRFAnalysis:
                         + ", using MMLIL SSA"
                     )
                 else:  # Normal case: get instruction before IP
-                    call = func[call - 1].ssa_form
+                    call = func[call if frameZero else (call - 1)].ssa_form
                 if call.operation != MediumLevelILOperation.MLIL_CALL_SSA:
-                    log.warning("Found non-call... skipping")
-                    index += 1
-                    continue
+                    if index != 0 and not frameZero:
+                        log.warning("Found non-call... skipping")
+                        index += 1
+                        continue
                 func = func.ssa_form
 
                 print("Searching through function", func.source_function.name)
@@ -115,9 +119,11 @@ class KRFAnalysis:
             except AttributeError:
                 raise Exception("Could not find function containing {:x}".format(rips[index]))
 
-            if numArgs is None:  # Add all parameters if not manually set
+            if numArgs is None and not frameZero:  # Add all parameters if not manually set
                 taintedArgs = range(len(call.params))
-            taintedArgs = self.checkFunction(func, call, taintedArgs)
+            taintedArgs = self.checkFunction(
+                func, call, taintedArgs, frameZero=(frameZero if index == 0 else False)
+            )
             log.debug(taintedArgs)
             index += 1
 

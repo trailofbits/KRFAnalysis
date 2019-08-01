@@ -10,12 +10,16 @@ def analyze_crash(core):
     with open(core) as f:
         crash_data = json.loads(f.read())
     taintedArgs = None
+    frameZero = True
     for file in crash_data:
         if taintedArgs is not None and len(taintedArgs) == 0:
             break  # All paths explored
         data = [int(x, 16) for x in file["stack"]]
         print("  Running on file", file["file"])
-        taintedArgs = binaries[file["file"]].run(*data, taintedArgs=taintedArgs)
+        taintedArgs = binaries[file["file"]].run(
+            *data, taintedArgs=taintedArgs, frameZero=frameZero
+        )
+        frameZero = False
 
 
 if __name__ == "__main__":
