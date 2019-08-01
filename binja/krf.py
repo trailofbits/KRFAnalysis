@@ -14,6 +14,20 @@ class KRFAnalysis:
         self.bv.update_analysis_and_wait()
         log.debug("Analysis finished")
 
+    def getMLILforInst(self, inst_ptr, func):  # Heuristic to get MLIL for instruction
+        inst = func.get_instruction_start(inst_ptr)  # index of inst
+        while inst is None:  # Keep going forward an inst, since they collapse forward
+            inst_ptr += self.bv.get_instruction_length(inst_ptr)
+            inst = func.get_instruction_start(inst_ptr)
+        return func[inst].ssa_form
+
+    def getMLILforCall(self, inst_ptr, func):  # Get it when its a call
+        for il in func.instructions:
+            if il.operation == MediumLevelILOperation.MLIL_CALL and (
+                il.address + self.bv.get_instruction_length(il.address) == inst_ptr
+            ):
+                return il.ssa_form
+
     def checkFunction(self, func, call, tainted, frameZero=False):
         visited_instructions = set()
         var_stack = []
@@ -88,36 +102,25 @@ class KRFAnalysis:
             taintedArgs = [1]  # to pass while loop check, gets overwritten later
 
         while index < len(rips) and len(taintedArgs) > 0:
+            inst_ptr = rips[index] - startAddr
             try:
-                func = self.bv.get_functions_containing(rips[index] - startAddr)[
+                func = self.bv.get_functions_containing(inst_ptr)[
                     0
                 ].medium_level_il  # Containing function
-                call = func.get_instruction_start(rips[index] - startAddr)  # Get index
-                if call is None:  # MMLIL workaround for optimized out MLIL
-                    call = func.source_function.get_low_level_il_at(
-                        rips[index] - startAddr
-                    ).mmlil.ssa_form.instr_index
-                    call = func.source_function.llil.mmlil.ssa_form[
-                        call if frameZero else (call - 1)
-                    ].llil.mlil.ssa_form  # Hacky as heck, mlil form is not guarunteed.
-                    log.warning(
-                        "Could not find MLIL SSA instruction for "
-                        + hex(rips[index])
-                        + ", using MMLIL SSA"
-                    )
-                else:  # Normal case: get instruction before IP
-                    call = func[call if frameZero else (call - 1)].ssa_form
-                if call.operation != MediumLevelILOperation.MLIL_CALL_SSA:
-                    if index != 0 and not frameZero:
-                        log.warning("Found non-call... skipping")
-                        index += 1
-                        continue
-                func = func.ssa_form
-
-                print("Searching through function", func.source_function.name)
-                log.debug("call: " + str(call))
             except AttributeError:
-                raise Exception("Could not find function containing {:x}".format(rips[index]))
+                raise Exception("Could not find function containing {:x}".format(inst_ptr))
+
+            if not frameZero or index != 0:
+                call = self.getMLILforCall(
+                    inst_ptr, func
+                )  # Get address of instruction we are actually interested in
+            else:
+                call = self.getMLILforInst(inst_ptr, func)
+
+            func = func.ssa_form
+
+            print("Searching through function", func.source_function.name)
+            log.debug("call: " + str(call))
 
             if numArgs is None and not frameZero:  # Add all parameters if not manually set
                 taintedArgs = range(len(call.params))
